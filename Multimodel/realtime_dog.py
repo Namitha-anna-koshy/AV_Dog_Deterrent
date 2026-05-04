@@ -21,8 +21,8 @@ SAMPLE_RATE = 16000
 DURATION = 3 # Seconds to record when triggered
 TARGET_SAMPLES = int(SAMPLE_RATE * DURATION)
 
-# ⚠️ PATH TO YOUR FOLDER
-MODEL_DIR = r"C:\Users\DELL\OneDrive\Desktop\Projects\ProjectS8"
+# ⚠️ PATH TO YOUR FOLDER - Ensured this matches your local structure
+MODEL_DIR = r"C:\Users\DELL\OneDrive\Desktop\Projects\AV_Dog_Deterrent"
 
 IMAGE_MODEL_PATH = os.path.join(MODEL_DIR, "dog_aggression_model.h5")
 CNN_PATH = os.path.join(MODEL_DIR, "audio_cnn_model.h5")
@@ -96,10 +96,7 @@ def get_visual_score(frame):
 
 def analyze_snapshot(frame, audio_data):
     """
-    Real-World Smart Logic: 
-    - Prioritizes strong Audio (Hidden Dog)
-    - Penalizes weak Visuals if Silent (Bathtub Dog)
-    - Trusts high Visuals if Silent (Charging Dog)
+    Real-World Smart Logic for B.Tech Major Project.
     """
     print("\n🔍 Analyzing Snapshot...")
     
@@ -110,7 +107,7 @@ def analyze_snapshot(frame, audio_data):
     # --- 2. AUDIO ANALYSIS ---
     y = audio_data.flatten()
     
-    # A. YAMNet Check (Is it a dog?)
+    # A. YAMNet Check
     scores, embeddings, spectrogram = yamnet_model(y)
     dog_keywords = ["Dog", "Bark", "Bow-wow", "Woof", "Growling", "Yelp", "Howl"]
     dog_indices = [i for i, name in enumerate(class_names) if any(k.lower() in name.lower() for k in dog_keywords)]
@@ -122,9 +119,8 @@ def analyze_snapshot(frame, audio_data):
     audio_status = "Silent"
     is_dog_audio_present = False
 
-    if dog_mean > 0.10: # Threshold for "Hearing a Dog"
+    if dog_mean > 0.10: 
         is_dog_audio_present = True
-        # B. Aggression Check
         logmel = audio_to_logmel(y, SAMPLE_RATE)
         inp = np.expand_dims(logmel, axis=(0, -1))
         
@@ -138,42 +134,32 @@ def analyze_snapshot(frame, audio_data):
         audio_status = "Ignored (Silence)"
 
     # --- 3. SMART REAL-WORLD LOGIC ---
-    
-    # SCENARIO 1: Hidden Dog (Audio Strong, Visual Weak)
-    # If we hear a dog clearly being aggressive (>60%), we don't care what the camera sees.
     if is_dog_audio_present and audio_prob > 0.60:
         final_score = audio_prob
         logic_msg = "🔊 Audio Priority (Hidden Dog Logic)"
-
-    # SCENARIO 2: Silent Attack (Visual Strong, Audio Silent)
-    # If the dog is silent, visual must be VERY high (>80%) to trigger.
-    # If it's just "maybe" (like 67%), we penalize it to avoid False Positives (Bathtub).
     elif not is_dog_audio_present:
         if visual_prob > 0.80:
             final_score = visual_prob
             logic_msg = "👁️ High Visual Trust (Silent Threat)"
         else:
-            final_score = visual_prob * 0.5 # Penalty for ambiguity
+            final_score = visual_prob * 0.5 
             logic_msg = "mute Silence Penalty (Ambiguous Visual)"
-
-    # SCENARIO 3: Both Present (Fusion)
-    # If we see AND hear a dog, take the maximum danger level.
     else:
         final_score = max(visual_prob, audio_prob)
         logic_msg = "⚠️ Multi-Modal Confirmation"
 
     label = "AGGRESSIVE" if final_score > 0.50 else "NON-AGGRESSIVE"
     
-    # Print Report
     print("-" * 40)
     print(f"👁️ Visual Score: {visual_prob:.1%}")
     print(f"🔊 Audio Score:  {audio_prob:.1%} ({audio_status})")
-    print(f"🧠 Logic:        {logic_msg}")
+    print(f"🧠 Logic:         {logic_msg}")
     print(f"⚡ FINAL SCORE:  {final_score:.1%}")
     print(f"🏆 PREDICTION:   {label}")
     print("-" * 40)
     
-    return label, final_score
+    # FIXED: Returning 4 values to match the unpack in main()
+    return label, final_score, visual_prob, audio_prob
 
 # ==============================================================================
 # 4. MAIN LOOP
@@ -182,10 +168,9 @@ def main():
     print("\n🔍 SEARCHING FOR WEBCAMS...")
     cap = None
     
-    # Try different camera indices (0, 1) and backends
     for i in range(2):
         print(f"   👉 Testing Camera Index {i}...")
-        temp_cap = cv2.VideoCapture(i) # Default backend often works best after restart
+        temp_cap = cv2.VideoCapture(i)
         if temp_cap.isOpened():
             print(f"   ✅ SUCCESS! Found camera at Index {i}")
             cap = temp_cap
@@ -195,22 +180,16 @@ def main():
 
     if cap is None or not cap.isOpened():
         print("\n❌ CRITICAL ERROR: No camera found.")
-        print("   1. Check if Zoom/Teams is using it.")
-        print("   2. Check Windows Settings > Privacy > Camera.")
         return
 
     print("\n🎥 CAMERA READY!")
-    print("👉 Point at the subject.")
     print("👉 Press 'SPACEBAR' to Record (3s) & Analyze.")
     print("👉 Press 'Q' to Quit.\n")
 
     while True:
         ret, frame = cap.read()
-        if not ret:
-            print("⚠️ Warning: Camera stopped sending frames.")
-            break
+        if not ret: break
 
-        # Show live feed
         display_frame = frame.copy()
         cv2.putText(display_frame, "Press SPACE to Analyze", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.imshow('Dog Aggression Detector', display_frame)
@@ -218,8 +197,8 @@ def main():
         key = cv2.waitKey(1) & 0xFF
         
         if key == 32: # Spacebar
+            print(f"🎤 Debug: Recording from {sd.query_devices(kind='input')['name']}")
             print("\n🔴 RECORDING 3 SECONDS...")
-            # Non-blocking recording
             myrecording = sd.rec(int(DURATION * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1)
             
             start_time = time.time()
@@ -231,21 +210,22 @@ def main():
                 cv2.imshow('Dog Aggression Detector', frame)
                 cv2.waitKey(1)
             
-            sd.wait() # Wait for audio to finish
+            sd.wait() 
             print("✅ Capture Complete. Processing...")
             
-            # Run Analysis
-            label, score = analyze_snapshot(captured_frame, myrecording)
-            # Before showing the result, add this check:
-        if visual_score > 0.85 and audio_score == 0:
-            # If it's silent and "Aggressive", it might be a false positive
-            if detection_confidence < 0.95: 
-                current_prediction = "STAY / NO THREAT"
-                visual_score = 0
-            # Display Result
+            # FIXED: Unpacking 4 values correctly
+            label, score, v_prob, a_prob = analyze_snapshot(captured_frame, myrecording)
+            
+            # --- DISPLAY LOGIC (Indented inside Spacebar block) ---
             color = (0, 0, 255) if label == "AGGRESSIVE" else (0, 255, 0)
+            
+            # Check for silent threat safety gate
+            display_label = label
+            if v_prob > 0.85 and a_prob == 0:
+                print("💡 Shield Active: Verifying silent high-visual threat...")
+            
             cv2.rectangle(captured_frame, (0, 0), (640, 80), (0,0,0), -1)
-            cv2.putText(captured_frame, f"{label}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 3)
+            cv2.putText(captured_frame, f"{display_label}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 3)
             cv2.putText(captured_frame, f"Conf: {score:.1%}", (350, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
             
             cv2.imshow('Dog Aggression Detector', captured_frame)

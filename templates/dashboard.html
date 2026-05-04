@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Canine Guard Defense System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', sans-serif; }
+        .card { background-color: #161b22; border: 1px solid #30363d; }
+        .status-safe { color: #2ea043; font-weight: bold; }
+        .status-danger { color: #da3633; font-weight: bold; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        img { width: 100%; border-radius: 8px; border: 2px solid #30363d; min-height: 400px; background: #000; }
+    </style>
+</head>
+<body class="container py-5">
+    <div class="row mb-4">
+        <div class="col text-center">
+            <h1>🛡️ CANINE GUARD <span class="badge bg-primary">PRO</span></h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="card-title">Live Surveillance</h5>
+                    <span id="modeParams" class="badge bg-secondary">WAITING...</span>
+                </div>
+                <img id="videoStream" src="" alt="Video Feed Stopped">
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card p-3 mb-3">
+                <h5>System Status</h5>
+                <h2 id="statusText" class="status-safe">SAFE</h2>
+                <div class="progress" style="height: 25px;">
+                    <div id="threatBar" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
+                </div>
+            </div>
+
+            <div class="card p-3 mb-3">
+                <h5>📁 Controls</h5>
+                <input class="form-control bg-dark text-light mb-2" type="file" id="videoUpload" accept=".mp4,.avi">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="uploadVideo()">▶️ Play Uploaded Video</button>
+                    <button class="btn btn-outline-light" onclick="switchToLive()">📷 Live Camera</button>
+                    <button class="btn btn-danger" onclick="stopFeed()">⏹️ STOP FEED</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- REAL-TIME AUDIO SYNTHESIZER (ULTRASONIC SIMULATOR) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        let oscillator;
+        let isBeeping = false;
+
+        function startBeep() {
+            if (isBeeping) return; // Don't start if already playing
+            
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(10000, audioCtx.currentTime); // 10kHz High Pitch
+            oscillator.connect(audioCtx.destination);
+            oscillator.start();
+            isBeeping = true;
+        }
+
+        function stopBeep() {
+            if (oscillator && isBeeping) {
+                oscillator.stop();
+                oscillator.disconnect();
+                oscillator = null;
+                isBeeping = false;
+            }
+        }
+
+        // --- WEBSOCKET LOGIC ---
+        const ws = new WebSocket("ws://" + location.host + "/ws/data");
+        const statusText = document.getElementById("statusText");
+        const threatBar = document.getElementById("threatBar");
+        const videoImg = document.getElementById("videoStream");
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            statusText.innerText = data.status;
+            threatBar.style.width = data.score + "%";
+            threatBar.innerText = data.score + "%";
+
+            if(data.status === "AGGRESSIVE") {
+                statusText.className = "status-danger";
+                threatBar.className = "progress-bar bg-danger";
+                startBeep(); // Trigger Synthesizer
+            } else {
+                statusText.className = "status-safe";
+                threatBar.className = "progress-bar bg-success";
+                stopBeep();  // Stop Synthesizer
+            }
+        };
+
+        // --- BUTTON FUNCTIONS ---
+        function reloadStream() {
+            videoImg.src = "/video_feed?" + new Date().getTime();
+        }
+
+        async function uploadVideo() {
+            // Unlocking Audio Context on First Click
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const fileInput = document.getElementById('videoUpload');
+            if(fileInput.files.length === 0) return alert("Select a file!");
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            
+            document.getElementById("modeParams").innerText = "LOADING...";
+            await fetch('/upload_video', { method: 'POST', body: formData });
+            
+            document.getElementById("modeParams").innerText = "VIDEO FILE (1x SPEED)";
+            reloadStream();
+        }
+
+        async function switchToLive() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            document.getElementById("modeParams").innerText = "STARTING CAM...";
+            await fetch('/switch_mode', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mode: "LIVE" }) 
+            });
+            document.getElementById("modeParams").innerText = "LIVE CAMERA";
+            reloadStream();
+        }
+
+        async function stopFeed() {
+            await fetch('/stop_feed', { method: 'POST' });
+            videoImg.src = ""; 
+            document.getElementById("modeParams").innerText = "STOPPED";
+            statusText.innerText = "OFFLINE";
+            statusText.className = "text-muted";
+            threatBar.style.width = "0%";
+            stopBeep(); // Ensure sound stops
+        }
+    </script>
+</body>
+</html>
