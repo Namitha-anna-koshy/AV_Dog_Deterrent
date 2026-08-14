@@ -1,0 +1,5 @@
+{
+  "_comment": "Edit 'location' and 'coordinates' if you want to override GPS/Wi-Fi.",
+  "location": "",
+  "coordinates": ""
+}

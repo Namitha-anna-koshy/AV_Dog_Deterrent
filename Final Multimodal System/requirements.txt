@@ -1,0 +1,10 @@
+opencv-python
+numpy
+tensorflow
+tensorflow-hub
+librosa
+sounddevice
+ultralytics
+selenium
+webdriver-manager
+scikit-learn
